@@ -19,11 +19,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        val context = applicationContext
+        val database = AppDatabase.getDatabase(context)
+        val repository = PocketBuildRepository(database)
+        val factory = PocketBuildViewModelFactory(context, repository)
+        
         setContent {
-            val context = LocalContext.current
-            val database = AppDatabase.getDatabase(context.applicationContext)
-            val repository = PocketBuildRepository(database)
-            val factory = PocketBuildViewModelFactory(context.applicationContext, repository)
             val viewModel: PocketBuildViewModel = viewModel(factory = factory)
             val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
             

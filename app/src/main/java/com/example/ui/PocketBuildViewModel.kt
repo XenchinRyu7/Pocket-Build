@@ -189,7 +189,10 @@ class PocketBuildViewModel(
             dateImported = System.currentTimeMillis(),
             folderPath = parsed.folderPath,
             hasGradle = parsed.hasGradle,
-            errorMessage = parsed.error
+            errorMessage = parsed.error,
+            targetSdk = parsed.targetSdk,
+            gradleVersion = parsed.gradleVersion,
+            jdkVersion = parsed.jdkVersion
         )
         val id = repository.insertProject(entity)
         // Select newly created project
@@ -285,14 +288,17 @@ class PocketBuildViewModel(
                 return@launch
             }
             addCompilerLog("Loaded Gradle module configuration: ':app' project reference.")
-            addCompilerLog("Found compiler parameters: minSdk=${project.versionCode}, targetSdk=35")
+            addCompilerLog("Found compiler parameters: minSdk=${project.versionCode}, targetSdk=${project.targetSdk}")
             delay(1200)
 
             // Step 2: Preparing Embedded SDK
             _currentBuildStep.value = 2
             _buildProgress.value = 0.32f
             addCompilerLog("Step 3/6: Preparing embedded platform Android SDK...")
-            addCompilerLog("Verifying Android API Level v35 packages...")
+            addCompilerLog("Verifying Android API Level v${project.targetSdk} packages...")
+            addCompilerLog("Aligning dynamic compilation engine details requirements:")
+            addCompilerLog("  -> Setting JVM Target Toolchain: JDK ${project.jdkVersion}")
+            addCompilerLog("  -> Resolving Gradle Wrapper: v${project.gradleVersion}")
             addCompilerLog("Resolving platform frameworks runtime dependencies...")
             addCompilerLog("SDK tools loaded successfully.")
             delay(1000)
@@ -348,7 +354,10 @@ class PocketBuildViewModel(
                 versionCode = project.versionCode,
                 primaryColorHex = project.primaryColorHex,
                 hasGradle = project.hasGradle,
-                folderPath = project.folderPath
+                folderPath = project.folderPath,
+                targetSdk = project.targetSdk,
+                gradleVersion = project.gradleVersion,
+                jdkVersion = project.jdkVersion
             )
             val apkFile = ProjectManager.compileAndGenerateApk(context, parsedProj)
             _lastBuiltApkFile.value = apkFile
@@ -391,6 +400,68 @@ class PocketBuildViewModel(
             val dir = File(project.folderPath)
             if (dir.exists()) {
                 dir.deleteRecursively()
+            }
+        }
+    }
+
+    fun deleteBuild(buildId: Long) {
+        viewModelScope.launch {
+            repository.deleteBuildById(buildId)
+        }
+    }
+
+    // --- Interactive Source Code Editor Engine ---
+    private val _projectFiles = MutableStateFlow<List<File>>(emptyList())
+    val projectFiles: StateFlow<List<File>> = _projectFiles.asStateFlow()
+
+    private val _selectedFile = MutableStateFlow<File?>(null)
+    val selectedFile: StateFlow<File?> = _selectedFile.asStateFlow()
+
+    private val _selectedFileContent = MutableStateFlow("")
+    val selectedFileContent: StateFlow<String> = _selectedFileContent.asStateFlow()
+
+    fun loadProjectFiles(folderPath: String) {
+        viewModelScope.launch {
+            val list = ProjectManager.listProjectEditableFiles(folderPath)
+            _projectFiles.value = list
+            if (list.isNotEmpty()) {
+                selectFile(list[0])
+            } else {
+                _selectedFile.value = null
+                _selectedFileContent.value = ""
+            }
+        }
+    }
+
+    fun selectFile(file: File) {
+        _selectedFile.value = file
+        _selectedFileContent.value = ProjectManager.readProjectFile(file)
+    }
+
+    fun saveFileContent(content: String) {
+        val file = _selectedFile.value ?: return
+        viewModelScope.launch {
+            val success = ProjectManager.writeProjectFile(file, content)
+            if (success) {
+                _selectedFileContent.value = content
+                // If they edit properties, strings or gradle, re-analyze to synchronize project stats
+                _selectedProject.value?.let { current ->
+                    val parsed = ProjectManager.analyzeProjectFolder(File(current.folderPath), current.name)
+                    val updated = current.copy(
+                        appName = parsed.appName,
+                        packageName = parsed.packageName,
+                        versionName = parsed.versionName,
+                        versionCode = parsed.versionCode,
+                        hasGradle = parsed.hasGradle,
+                        targetSdk = parsed.targetSdk,
+                        gradleVersion = parsed.gradleVersion,
+                        jdkVersion = parsed.jdkVersion,
+                        errorMessage = parsed.error,
+                        status = if (parsed.error != null) "Error" else current.status
+                    )
+                    repository.updateProject(updated)
+                    _selectedProject.value = updated
+                }
             }
         }
     }

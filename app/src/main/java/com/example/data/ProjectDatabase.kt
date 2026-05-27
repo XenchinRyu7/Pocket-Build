@@ -29,7 +29,10 @@ data class ProjectEntity(
     val dateImported: Long,
     val folderPath: String,
     val hasGradle: Boolean,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val targetSdk: Int = 35,
+    val gradleVersion: String = "8.5",
+    val jdkVersion: String = "17"
 )
 
 @Entity(tableName = "builds")

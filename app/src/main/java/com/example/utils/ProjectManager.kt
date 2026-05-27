@@ -21,7 +21,10 @@ data class ParsedProject(
     val primaryColorHex: String,
     val hasGradle: Boolean,
     val folderPath: String,
-    val error: String? = null
+    val error: String? = null,
+    val targetSdk: Int = 35,
+    val gradleVersion: String = "8.5",
+    val jdkVersion: String = "17"
 )
 
 object ProjectManager {
@@ -236,6 +239,9 @@ object ProjectManager {
         var versionName = "1.0.0"
         var versionCode = 1
         var primaryColorHex = "#03A9F4"
+        var targetSdk = 35
+        var gradleVersion = "8.5"
+        var jdkVersion = "17"
 
         // Search files recursively up to 4 levels
         val fileTree = mutableListOf<File>()
@@ -244,6 +250,15 @@ object ProjectManager {
         for (file in fileTree) {
             if (file.name == "settings.gradle" || file.name == "settings.gradle.kts") {
                 hasGradleSettings = true
+            }
+            if (file.name == "gradle-wrapper.properties") {
+                try {
+                    val content = file.readText()
+                    val gradleRegex = "gradle-([0-9.]+)-(bin|all)\\.zip".toRegex()
+                    gradleRegex.find(content)?.apply {
+                        gradleVersion = groupValues[1]
+                    }
+                } catch (ignored: Exception) {}
             }
             if (file.name == "build.gradle" || file.name == "build.gradle.kts") {
                 hasGradleBuild = true
@@ -258,9 +273,21 @@ object ProjectManager {
                     verNameRegex.find(content)?.apply {
                         versionName = groupValues[1]
                     }
-                    val verCodeRegex = "versionCode\\s*=\\s*(\\d+)".toRegex()
+                    val verCodeRegex = "versionCode\\s*=\\s*([0-9]+)".toRegex()
                     verCodeRegex.find(content)?.apply {
                         versionCode = groupValues[1].toIntOrNull() ?: 1
+                    }
+                    val targetSdkRegex = "(targetSdk|targetSdkVersion)\\s*=?\\s*([0-9]+)".toRegex()
+                    targetSdkRegex.find(content)?.apply {
+                        targetSdk = groupValues[2].toIntOrNull() ?: 35
+                    }
+                    val jvmRegex = "(jvmTarget|sourceCompatibility|targetCompatibility)\\s*=?\\s*.*?[\"']?([0-9]+)[\"']?".toRegex()
+                    jvmRegex.find(content)?.apply {
+                        jdkVersion = groupValues[2]
+                    }
+                    val toolchainRegex = "languageVersion.*?JavaLanguageVersion\\.of\\((\\d+)\\)".toRegex()
+                    toolchainRegex.find(content)?.apply {
+                        jdkVersion = groupValues[1]
                     }
                 } catch (ignored: Exception) {}
             }
@@ -286,7 +313,10 @@ object ProjectManager {
             primaryColorHex = primaryColorHex,
             hasGradle = hasGradle,
             folderPath = folder.absolutePath,
-            error = if (!hasGradle) "Gradle project not detected. Missing settings.gradle or build.gradle." else null
+            error = if (!hasGradle) "Gradle project not detected. Missing settings.gradle or build.gradle." else null,
+            targetSdk = targetSdk,
+            gradleVersion = gradleVersion,
+            jdkVersion = jdkVersion
         )
     }
 
@@ -457,5 +487,64 @@ object ProjectManager {
         if (kb < 1024) return String.format("%.1f KB", kb)
         val mb = kb / 1024.0
         return String.format("%.1f MB", mb)
+    }
+
+    /**
+     * Get all editable project source files (excluding build folders and caches)
+     */
+    fun listProjectEditableFiles(folderPath: String): List<File> {
+        val root = File(folderPath)
+        val files = mutableListOf<File>()
+        if (root.exists() && root.isDirectory) {
+            gatherEditableFiles(root, files)
+        }
+        return files.sortedWith { f1, f2 ->
+            val ext1 = f1.extension.uppercase()
+            val ext2 = f2.extension.uppercase()
+            when {
+                f1.name.contains("build.gradle") -> -1
+                f2.name.contains("build.gradle") -> 1
+                ext1 == "KTS" && ext2 != "KTS" -> -1
+                ext1 != "KTS" && ext2 == "KTS" -> 1
+                ext1 == "XML" && ext2 != "XML" -> -1
+                ext1 != "XML" && ext2 == "XML" -> 1
+                else -> f1.name.compareTo(f2.name)
+            }
+        }
+    }
+
+    private fun gatherEditableFiles(dir: File, result: MutableList<File>) {
+        val list = dir.listFiles() ?: return
+        val skipFolders = listOf("build", ".gradle", ".git", ".idea", "bin")
+        val editableExtensions = listOf("kt", "java", "xml", "gradle", "kts", "properties", "toml", "txt", "md", "json")
+        for (f in list) {
+            if (f.isDirectory) {
+                if (f.name !in skipFolders) {
+                    gatherEditableFiles(f, result)
+                }
+            } else {
+                if (f.extension.lowercase() in editableExtensions) {
+                    result.add(f)
+                }
+            }
+        }
+    }
+
+    fun readProjectFile(file: File): String {
+        return try {
+            file.readText()
+        } catch (e: Exception) {
+            "Error reading file: ${e.localizedMessage}"
+        }
+    }
+
+    fun writeProjectFile(file: File, content: String): Boolean {
+        return try {
+            file.writeText(content)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error writing file ${file.name}", e)
+            false
+        }
     }
 }

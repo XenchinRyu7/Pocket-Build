@@ -636,15 +636,15 @@ fun HomeTabScreen(
                 }
             }
         } else {
-            items(builds.take(4)) { build ->
-                BuildHistoryRow(build = build, context = context)
+            items(builds.take(10)) { build ->
+                BuildHistoryRow(build = build, context = context, onDeleteClick = { viewModel.deleteBuild(build.id) })
             }
         }
     }
 }
 
 @Composable
-fun BuildHistoryRow(build: BuildHistoryEntity, context: Context) {
+fun BuildHistoryRow(build: BuildHistoryEntity, context: Context, onDeleteClick: () -> Unit) {
     val durationText = "${build.durationMs / 1000}s"
     val sizeText = build.apkSize?.let { ProjectManager.formatSize(it) } ?: ""
     val isSuccess = build.status == "Success"
@@ -654,17 +654,17 @@ fun BuildHistoryRow(build: BuildHistoryEntity, context: Context) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp)
+            .padding(vertical = 4.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(36.dp)
                     .background(
                         color = if (isSuccess) Color(0xFF4CAF50).copy(alpha = 0.12f)
                         else Color(0xFFF44336).copy(alpha = 0.12f),
@@ -675,55 +675,71 @@ fun BuildHistoryRow(build: BuildHistoryEntity, context: Context) {
                 Icon(
                     imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Warning,
                     contentDescription = null,
-                    tint = if (isSuccess) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    tint = if (isSuccess) Color(0xFF4CAF50) else Color(0xFFF44336),
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1.2f)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = build.appName,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = build.projectName,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier.weight(0.8f)
-            ) {
-                Text(
-                    text = build.status,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = if (isSuccess) Color(0xFF4CAF50) else Color(0xFFF44336)
-                )
                 Text(
                     text = "$durationText • $sizeText",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 )
             }
 
-            if (isSuccess && build.apkPath != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isSuccess && build.apkPath != null) {
+                    IconButton(
+                        onClick = { installApkFile(context, File(build.apkPath)) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Install APK",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(2.dp))
+                    IconButton(
+                        onClick = { shareApkFile(context, File(build.apkPath)) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share APK",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(2.dp))
+                }
+                
                 IconButton(
-                    onClick = { shareApkFile(context, File(build.apkPath)) },
-                    modifier = Modifier.padding(start = 8.dp)
+                    onClick = onDeleteClick,
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Share APK",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Hapus Riwayat",
+                        tint = Color(0xFFF44336).copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -744,6 +760,7 @@ fun ProjectsTabScreen(
     val selectedProj by viewModel.selectedProject.collectAsStateWithLifecycle()
 
     var showEditorSheet by remember { mutableStateOf(false) }
+    var showCodeEditorSheet by remember { mutableStateOf(false) }
 
     // visual configurations state
     var editAppName by remember { mutableStateOf("") }
@@ -863,7 +880,7 @@ fun ProjectsTabScreen(
                                         modifier = Modifier
                                             .size(42.dp)
                                             .background(
-                                                color = Color(android.graphics.Color.parseColor(project.primaryColorHex)).copy(alpha = 0.15f),
+                                                color = safeParseColor(project.primaryColorHex).copy(alpha = 0.15f),
                                                 shape = RoundedCornerShape(12.dp)
                                             ),
                                         contentAlignment = Alignment.Center
@@ -871,7 +888,7 @@ fun ProjectsTabScreen(
                                         Icon(
                                             imageVector = Icons.Default.Build,
                                             contentDescription = null,
-                                            tint = Color(android.graphics.Color.parseColor(project.primaryColorHex)),
+                                            tint = safeParseColor(project.primaryColorHex),
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
@@ -942,12 +959,33 @@ fun ProjectsTabScreen(
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
                                 )
 
-                                Text(
-                                    text = "v${project.versionName} (${project.versionCode})",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(
+                                        onClick = {
+                                            viewModel.selectProject(project)
+                                            viewModel.loadProjectFiles(project.folderPath)
+                                            showCodeEditorSheet = true
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Editor Kode", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "v${project.versionName} (${project.versionCode})",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -981,13 +1019,13 @@ fun ProjectsTabScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Canva untuk APK",
+                            text = "Build Details",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Visual Customizer Pro (Simulasi)",
+                            text = "Konfigurasi Engine & Persyaratan Project",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
@@ -997,7 +1035,7 @@ fun ProjectsTabScreen(
                         modifier = Modifier
                             .size(36.dp)
                             .background(
-                                color = Color(android.graphics.Color.parseColor(editAccentColor)).copy(alpha = 0.15f),
+                                color = safeParseColor(editAccentColor).copy(alpha = 0.15f),
                                 shape = CircleShape
                             ),
                         contentAlignment = Alignment.Center
@@ -1005,7 +1043,7 @@ fun ProjectsTabScreen(
                         Box(
                             modifier = Modifier
                                 .size(16.dp)
-                                .background(Color(android.graphics.Color.parseColor(editAccentColor)), CircleShape)
+                                .background(safeParseColor(editAccentColor), CircleShape)
                         )
                     }
                 }
@@ -1057,14 +1095,39 @@ fun ProjectsTabScreen(
                     )
 
                     OutlinedTextField(
-                        value = "35",
+                        value = project.jdkVersion ?: "17",
                         onValueChange = {},
                         enabled = false,
-                        label = { Text("Target SDK", fontSize = 12.sp) },
+                        label = { Text("Required JDK", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Persyaratan Engine Terdeteksi", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("Target SDK", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                Text("API ${project.targetSdk ?: "34"}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            Column {
+                                Text("Gradle Engine", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                Text(project.gradleVersion ?: "8.2", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            Column {
+                                Text("Java Compiler", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                Text("JDK ${project.jdkVersion ?: "17"}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
 
                 // Accent Theme Colors Pickers
@@ -1082,7 +1145,7 @@ fun ProjectsTabScreen(
                             Box(
                                 modifier = Modifier
                                     .size(34.dp)
-                                    .background(Color(android.graphics.Color.parseColor(hex)), CircleShape)
+                                    .background(safeParseColor(hex), CircleShape)
                                     .clickable { editAccentColor = hex }
                                     .border(
                                         width = if (isChosen) 3.dp else 0.dp,
@@ -1145,6 +1208,186 @@ fun ProjectsTabScreen(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+
+    // BOTTOM CODE EDITOR DRAWER
+    if (showCodeEditorSheet && selectedProj != null) {
+        val project = selectedProj!!
+        val projectFiles by viewModel.projectFiles.collectAsStateWithLifecycle()
+        val selectedFile by viewModel.selectedFile.collectAsStateWithLifecycle()
+        val selectedContent by viewModel.selectedFileContent.collectAsStateWithLifecycle()
+        var codeText by remember(selectedContent) { mutableStateOf(selectedContent) }
+
+        ModalBottomSheet(
+            onDismissRequest = { showCodeEditorSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            modifier = Modifier.fillMaxHeight(0.9f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Header Details
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "In-App Code Editor",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Ubah kode sumber android asli di HP",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+
+                    Row {
+                        IconButton(
+                            onClick = {
+                                viewModel.saveFileContent(codeText)
+                                Toast.makeText(context, "File berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = Color(0xFF4CAF50).copy(alpha = 0.15f),
+                                contentColor = Color(0xFF4CAF50)
+                            ),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Simpan", modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { showCodeEditorSheet = false },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Tutup", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+
+                // Horizontal list of Project files
+                Text(
+                    text = "Daftar File Project (${projectFiles.size})",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+
+                if (projectFiles.isEmpty()) {
+                    Text(
+                        text = "Tidak menemukan file sumber yang dapat diedit di project ini.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        projectFiles.forEach { file ->
+                            val isFileSelected = selectedFile?.absolutePath == file.absolutePath
+                            val fileColor = if (isFileSelected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            val fileBg = if (isFileSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(fileBg)
+                                    .border(
+                                        width = if (isFileSelected) 1.dp else 0.dp,
+                                        color = if (isFileSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { viewModel.selectFile(file) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = file.name,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isFileSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = fileColor
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Selected File path
+                selectedFile?.let { file ->
+                    Text(
+                        text = "Mengedit: ${file.absolutePath.substringAfter(project.folderPath)}",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                }
+
+                // Interactive Edit Area Viewport
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .background(Color(0xFF0F172A), RoundedCornerShape(16.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                ) {
+                    if (selectedFile == null) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Silakan pilih file di atas", color = Color.White.copy(alpha = 0.3f), fontSize = 12.sp)
+                        }
+                    } else {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = codeText,
+                            onValueChange = { codeText = it },
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(14.dp)
+                                .verticalScroll(rememberScrollState())
+                        )
+                    }
+                }
+
+                // CTA Action compilation route
+                Button(
+                    onClick = {
+                        viewModel.saveFileContent(codeText)
+                        viewModel.setActiveTab(2) // build pipeline tab
+                        showCodeEditorSheet = false
+                        viewModel.triggerApkBuild(project)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Build, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Simpan & Compile Project", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -1229,6 +1472,13 @@ fun BuildTabScreen(
             }
         } else {
             val project = selectedProj!!
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
 
             // Steps and Progress Ring Display
             Card(
@@ -1388,7 +1638,7 @@ fun BuildTabScreen(
 
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .height(240.dp)
                     .fillMaxWidth()
                     .background(Color(0xFF0F172A), RoundedCornerShape(14.dp))
                     .padding(12.dp)
@@ -1445,22 +1695,35 @@ fun BuildTabScreen(
 
                 if (buildState == "Finished" && lastApkFile != null) {
                     Button(
-                        onClick = { shareApkFile(context, lastApkFile!!) },
+                        onClick = { installApkFile(context, lastApkFile!!) },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
                         modifier = Modifier
                             .height(48.dp)
-                            .weight(1.2f),
+                            .weight(1.1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Install", fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { shareApkFile(context, lastApkFile!!) },
+                        modifier = Modifier
+                            .height(48.dp)
+                            .weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Share APK", fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Share", fontWeight = FontWeight.Bold)
                     }
                 }
             }
-        }
-    }
-}
+        } // Close inner Column (line 1475)
+    } // Close else block (line 1473)
+} // Close outer Column (line 1423)
+} // Close BuildTabScreen Composable (line 1398)
 
 // --- ENGINE TAB SCREEN ---
 @Composable
@@ -1485,11 +1748,12 @@ fun EngineTabScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = "Build Engine Admin",
+            text = "Build Engine",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -1586,7 +1850,7 @@ fun EngineTabScreen(
 
         Box(
             modifier = Modifier
-                .weight(1f)
+                .height(180.dp)
                 .fillMaxWidth()
                 .background(Color(0xFF0F172A), RoundedCornerShape(14.dp))
                 .padding(12.dp)
@@ -1782,13 +2046,17 @@ fun SettingsTabScreen(
 private fun getFileName(context: Context, uri: Uri): String? {
     var result: String? = null
     if (uri.scheme == "content") {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index != -1) {
-                    result = cursor.getString(index)
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) {
+                        result = cursor.getString(index)
+                    }
                 }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("getFileName", "Error querying file name", e)
         }
     }
     if (result == null) {
@@ -1799,6 +2067,21 @@ private fun getFileName(context: Context, uri: Uri): String? {
         }
     }
     return result
+}
+
+fun safeParseColor(colorHex: String?, fallback: Color = Color(0xFF03A9F4)): Color {
+    val hex = colorHex?.trim() ?: return fallback
+    if (hex.isBlank()) return fallback
+    return try {
+        Color(android.graphics.Color.parseColor(hex))
+    } catch (e: Exception) {
+        try {
+            val formatted = if (hex.startsWith("#")) hex else "#$hex"
+            Color(android.graphics.Color.parseColor(formatted))
+        } catch (e2: Exception) {
+            fallback
+        }
+    }
 }
 
 // --- FILE SHARING / INSTALL PROVIDER ROUTINES ---
@@ -1827,5 +2110,29 @@ private fun shareApkFile(context: Context, file: File) {
         context.startActivity(chooser)
     } catch (e: Exception) {
         Toast.makeText(context, "Gagal membagikan APK: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun installApkFile(context: Context, file: File) {
+    try {
+        if (!file.exists()) {
+            Toast.makeText(context, "File APK tidak ditemukan!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val apkUri: Uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(apkUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "Gagal meng-install APK: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
     }
 }
