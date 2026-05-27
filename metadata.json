@@ -1,0 +1,6 @@
+{
+  "name": "PocketBuild",
+  "description": "Native Android APK builder directly on your phone, complete with embedded build engine, code analysis, real ZIP import, and APK compilation pipelines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
